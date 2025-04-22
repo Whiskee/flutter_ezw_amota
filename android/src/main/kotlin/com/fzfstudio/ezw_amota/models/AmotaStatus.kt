@@ -5,6 +5,8 @@ package com.fzfstudio.ezw_amota.models
  */
 enum class AmotaStatus(status: Int) {
 
+    //  升级成功
+    UPGRADE_SUCCESS(0),
     //  CRC校验失败
     CRC_ERROR(1),
     //  无效的头信息
@@ -19,10 +21,14 @@ enum class AmotaStatus(status: Int) {
     UNKNOWN_ERROR(6),
     //  包长超出最大值
     MAX(7),
-    //  文件打开失败
-    FILE_OPEN_ERROR(8),
+    //  文件读取失败
+    FILE_READ_ERROR(8),
     //  指令发送失败
-    CMD_SEND_ERROR(9);
+    CMD_SEND_ERROR(9),
+    //  升级中
+    UPGRADING(10),
+    //  升级停止
+    UPGRADE_STOP(11);
 
     val code: Int
         get() = when(this) {
@@ -33,7 +39,10 @@ enum class AmotaStatus(status: Int) {
             INSUFFICIENT_FLASH -> 5
             UNKNOWN_ERROR -> 6
             MAX -> 7
-            FILE_OPEN_ERROR -> 8
+            FILE_READ_ERROR -> 8
             CMD_SEND_ERROR -> 9
+            UPGRADING -> 10
+            UPGRADE_STOP -> 11
+            UPGRADE_SUCCESS -> 12
         }
 }

@@ -16,11 +16,7 @@ class MockFlutterEzwAmotaPlatform
   Future<void> release() async {}
 
   @override
-  Future<void> startOtaUpgrade(
-    String filePath, {
-    String? serviceUuid,
-    String? readUuid,
-  }) async {}
+  Future<void> startOtaUpgrade(String filePath, {String? uuid}) async {}
 
   @override
   Future<void> stopOtaUpgrade() async {}

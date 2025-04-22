@@ -11,9 +11,7 @@ import com.fzfstudio.ezw_amota.models.AmotaStatus
 import com.fzfstudio.ezw_amota.utils.CrcCalculator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.SupervisorJob
@@ -46,12 +44,10 @@ class AmOtaService {
     private var otaJob: Job? = null
     //  协程作用域：主线程回调
     private val mainScope: CoroutineScope = MainScope()
-
     //  待升级固件文件的绝对路径
     private var filePath: String? = null
-
     //  OTA升级状态标志（true表示升级正在进行中）
-    private var isOtaUpdating = false
+    private var isOtaUpgrading = false
     //  固件文件输入流（用于读取二进制固件数据）
     private var fileInputStream: FileInputStream? = null
     //  当前文件读取偏移量（单位：字节，用于断点续传）
@@ -85,7 +81,7 @@ class AmOtaService {
      * 3. 启动协程执行升级任务
      */
     fun amOtaStart(filePath: String?) {
-        if (isOtaUpdating) {
+        if (isOtaUpgrading) {
             Log.i(TAG, "Start ota: Is already updating")
             return
         }
@@ -96,7 +92,8 @@ class AmOtaService {
         otaJob = coroutineScope.launch {
             startOtaUpdate()
         }
-        isOtaUpdating = true
+        isOtaUpgrading = true
+        AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.UPGRADING.code)
     }
 
     /**
@@ -113,10 +110,12 @@ class AmOtaService {
         fileOffset = 0
         cmdResponseSemaphore?.release()
         cmdResponseSemaphore = null
-        isOtaUpdating = false
+        isOtaUpgrading = false
         coroutineScope.cancel()
+        //  停止OTA升级任务
         otaJob?.cancel()
         otaJob = null
+        AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.UPGRADE_STOP.code)
     }
 
     /**
@@ -189,38 +188,48 @@ class AmOtaService {
                 fileInputStream = inputStream
                 fileSize = inputStream.available()
                 if (fileSize == 0) {
-                    Log.w(TAG, "Start OTA: Open file error, path: $filePath")
-                    AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.FILE_OPEN_ERROR.code)
+                    Log.w(TAG, "OTA upgrading: Open file error, path: $filePath")
+                    AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.FILE_READ_ERROR.code)
                     return
                 }
                 if (!sendFwHeader()) {
-                    Log.e(TAG, "Start OTA: Send firmware header failed")
-                    isOtaUpdating = false
+                    if (!isOtaUpgrading) {
+                        return
+                    }
+                    isOtaUpgrading = false
+                    Log.e(TAG, "OTA upgrading: Send firmware header failed")
                     return
                 }
                 setFileOffset()
                 if (!sendFwData()) {
-                    Log.e(TAG, "Start OTA: Send firmware data failed")
-                    isOtaUpdating = false
+                    if (!isOtaUpgrading) {
+                        return
+                    }
+                    isOtaUpgrading = false
+                    Log.e(TAG, "OTA upgrading: Send firmware data failed")
                     return
                 }
                 if (!sendVerifyCmd()) {
-                    Log.e(TAG, "Start OTA: Firmware verification failed")
-                    isOtaUpdating = false
+                    if (!isOtaUpgrading) {
+                        return
+                    }
+                    isOtaUpgrading = false
+                    Log.e(TAG, "OTA upgrading: Firmware verification failed")
                     return
                 }
+                mainEventSend(AmotaEvent.UPGRADE_STATUS, AmotaStatus.UPGRADE_SUCCESS.code)
             }
         } catch (e: IOException) {
-            Log.e(TAG, "Start OTA: File operation error: ${e.message}")
-            isOtaUpdating = false
-            AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.FILE_OPEN_ERROR.code)
+            isOtaUpgrading = false
+            AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.FILE_READ_ERROR.code)
+            Log.e(TAG, "OTA upgrading: File operation error: ${e.message}")
         } catch (e: Exception) {
-            Log.e(TAG, "Start OTA: Failed: ${e.message}")
-            isOtaUpdating = false
+            isOtaUpgrading = false
             AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.UNKNOWN_ERROR.code)
+            Log.e(TAG, "OTA upgrading: Failed: ${e.message}")
         } finally {
-            Log.i(TAG, "Start OTA: Exit OTA update process")
             fileInputStream = null
+            Log.i(TAG, "OTA upgrading: Exit OTA update process")
         }
     }
 
@@ -299,6 +308,9 @@ class AmOtaService {
         return if (sendPacket(packet, packetLength)) {
             true
         } else {
+            if (!isOtaUpgrading) {
+                false
+            }
             // 错误处理：记录日志并发送状态更新
             Log.e(TAG, "Send Cmd: Failed, Cmd = ${cmd.name}")
             when (cmd) {
@@ -359,7 +371,7 @@ class AmOtaService {
     @OptIn(DelicateCoroutinesApi::class)
     @Throws(InterruptedException::class)
     private fun sendOneFrame(data: ByteArray?, isNeedResponse: Boolean = false): Boolean {
-        if (!isOtaUpdating) {
+        if (!isOtaUpgrading) {
             Log.e(TAG, "Send Cmd: OTA stopped due to application control")
             return false
         }
@@ -402,7 +414,7 @@ class AmOtaService {
         val fwDataSize = fileSize
         var ret = -1
         var offset = fileOffset
-        Log.d(TAG, "Send Fw Data: File size = $fileSize")
+        Log.i(TAG, "OTA upgrading - Send fw Data: File size = $fileSize")
         while (offset < fwDataSize) {
             try {
                 ret = sentFwDataPacket()
@@ -410,14 +422,17 @@ class AmOtaService {
                 e.printStackTrace()
             }
             if (ret < 0) {
-                Log.e(TAG, "Send data: Sent packet failed")
-                mainEventSend(AmotaEvent.UPGRADE_STATUS, AmotaStatus.INVALID_HEADER_INFO.code)
+                if (!isOtaUpgrading) {
+                    return false
+                }
+                Log.e(TAG, "OTA upgrading - Send fw data: Sent packet failed")
+                mainEventSend(AmotaEvent.UPGRADE_STATUS, AmotaStatus.INVALID_PACKAGE_LENGTH.code)
                 return false
             }
             offset += ret
             mainEventSend(AmotaEvent.UPGRADE_PROGRESS, (offset * 100) / fwDataSize)
         }
-        Log.i(TAG, "Send data: Send firmware data complete")
+        Log.i(TAG, "OTA upgrading - Send Fw data: Send firmware data complete")
         return true
     }
 
@@ -437,13 +452,13 @@ class AmOtaService {
         val fwData = ByteArray(len)
         ret = fileInputStream!!.read(fwData)
         if (ret <= 0) {
-            Log.e(TAG, "Sent data packet: No data read from mFsInput")
+            Log.e(TAG, "OTA upgrading - Sent data packet: No data read from mFsInput")
             return -1
         }
         if (ret < AMOTA_FW_PACKET_SIZE) {
             len = ret
         }
-        Log.i(TAG, "Sent data packet: Send fw data len = $len")
+        Log.i(TAG, "OTA upgrading - Sent data packet: Send fw data len = $len")
         return if (sendOtaCmd(AmotaCmd.AMOTA_CMD_FW_DATA, fwData, len)) {
             ret
         } else {
@@ -460,7 +475,7 @@ class AmOtaService {
      * 2. 发送命令并等待响应（超时5秒）
      */
     private suspend fun sendVerifyCmd(): Boolean {
-        Log.i(TAG, "Send cmd: Send fw verify cmd")
+        Log.i(TAG, "OTA upgrading - Send cmd: Send fw verify cmd")
         return sendOtaCmd(AmotaCmd.AMOTA_CMD_FW_VERIFY, byteArrayOf(), 0)
     }
 

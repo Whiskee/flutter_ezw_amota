@@ -70,25 +70,27 @@ public class AmOtaService: NSObject {
      * 步骤:
      * 1. 检查初始化状态
      * 2. 检查是否正在升级
-     * 3. 读取目标设备
+     * 3. 通过蓝牙设置中已连接获取
      * 4. 加载OTA文件
      * 5. 启用OTA升级接口
      */
-    func startOtaUpgrade(filePath: String) {
+    func startOtaUpgrade(uuid: String, filePath: String) {
         guard isInitialized else {
             log.error("AmOtaService - Start OTA: You must initOta first")
+            AmotaEC.upgradeStatus.event?(eAmotaStatus.otaNotInitialized)
             return
         }
         guard !isOtaUpgrading else {
             log.warning("AmOtaService - Start OTA: Is upgrading")
             return
         }
-        guard let peripheral = centralManager?.retrieveConnectedPeripherals(withServices: [CBUUID(string: UUID_AMOTA_SERVICE)]).first else {
+        guard let peripheral = centralManager?.retrieveConnectedPeripherals(withServices: [CBUUID(string: UUID_AMOTA_SERVICE)]).first(where: { peripheral in
+            peripheral.identifier.uuidString == uuid
+        }) else {
             log.error("AmOtaService - Start OTA: You must provide peripheral")
             return
         }
         guard loadOtaFile(filePath: filePath) else {
-            log.error("AmOtaService - Start OTA: File data is null, path = \(filePath)")
             return
         }
         //  给连接设备注册状态代理
@@ -96,6 +98,8 @@ public class AmOtaService: NSObject {
         self.peripheral?.delegate = self
         //  启用OTA升级接口：执行服务查询
         mAmOtaApi.amOtaEnable(peripheral, withServiceUUID: UUID_AMOTA_SERVICE)
+        AmotaEC.upgradeStatus.event?(eAmotaStatus.upgrading)
+        log.info("AmOtaService - Stop OTA: Success")
     }
     
     /**
@@ -110,10 +114,7 @@ public class AmOtaService: NSObject {
     func stopOtaUpgrade() {
         guard isInitialized else {
             log.warning("AmOtaService - Stop OTA: You must initOta first")
-            return
-        }
-        guard let peripheral = peripheral else {
-            log.error("AmOtaService - Stop OTA: Device is null or is disconnect")
+            AmotaEC.upgradeStatus.event?(eAmotaStatus.otaNotInitialized)
             return
         }
         guard isOtaUpgrading else {
@@ -123,7 +124,8 @@ public class AmOtaService: NSObject {
         fileBytes = nil
         fileSize = 0
         isOtaUpgrading = false
-        mAmOtaApi.amOtaPause(peripheral, with: ePauseReq.none)
+        mAmOtaApi.amOtaPause(peripheral, with: ePauseReq.fileReload)
+        AmotaEC.upgradeStatus.event?(eAmotaStatus.upgradeStop)
         log.info("AmOtaService - Stop OTA: finish")
     }
     
@@ -167,24 +169,24 @@ extension AmOtaService {
         do {
             let isReachable = try fileUrl.checkResourceIsReachable()
             if !isReachable {
+                AmotaEC.upgradeStatus.event?(eAmotaStatus.fileReadError)
                 log.error("AmOtaService - Start OTA: File not reachable: \(filePath)")
-                AmotaEC.upgradeStatus.event?(8)
                 return false
             }
         } catch {
+            AmotaEC.upgradeStatus.event?(eAmotaStatus.fileReadError)
             log.error("AmOtaService - Start OTA: File check failed: \(error.localizedDescription), path = \(filePath)")
-            AmotaEC.upgradeStatus.event?(8)
             return false
         }
         guard let fileData = NSData(contentsOfFile: filePath) else {
+            AmotaEC.upgradeStatus.event?(eAmotaStatus.fileReadError)
             log.error("AmOtaService - Start OTA: File data is null, path = \(filePath)")
-            AmotaEC.upgradeStatus.event?(8)
             return false
         }
         fileBytes = fileData.bytes.assumingMemoryBound(to: UInt8.self)
         fileSize = UInt32(fileData.length)
         let isFileEnable = fileBytes != nil && fileSize > 0
-        AmotaEC.upgradeStatus.event?(8)
+        AmotaEC.upgradeStatus.event?(eAmotaStatus.fileReadError)
         log.info("AmOtaService - Start OTA: File path = \(filePath), size = \(self.fileSize), is enable = \(isFileEnable)")
         return isFileEnable
     }
@@ -204,7 +206,8 @@ extension AmOtaService {
         }
         let otaEnableStatus = dictStatus[keyAmotaEnableConfirm]
         guard let status = otaEnableStatus as? NSNumber, status == 1 else {
-            log.info("AmOtaService - Start OTA: Config failed!!!")
+            AmotaEC.upgradeStatus.event?(eAmotaStatus.unknownError.rawValue)
+            log.error("AmOtaService - Start OTA: Config failed!!!")
             return
         }
         //  设置状态为升级状态
@@ -351,7 +354,7 @@ extension AmOtaService: AmotaApiUpdateAppDataDelegate {
      * 发送OTA升级状态
      *
      * @param eAmotaStatus 状态
-     * @param Int? 类型, 0 = 固件：头信息，1 = 固件：数据， 2 = 检验指令， 3 = 重制指令
+     * @param Int? 类型, 0 = 固件：头信息，1 = 固件：数据， 2 = 固件升级完成检验指令， 3 = 系统重置指令
      *
      * 步骤:
      * 1. 检查状态是否成功
@@ -362,12 +365,12 @@ extension AmOtaService: AmotaApiUpdateAppDataDelegate {
         guard status != eAmotaStatus.success else {
             //  校验指令发送成功后，表示升级完成
             if type == 2 {
-                AmotaEC.upgradeStatus.event?(eAmotaStatus.success)
+                AmotaEC.upgradeStatus.event?(eAmotaStatus.success.rawValue)
             }
             log.info("AmOtaService - Upgrading: Success, type = \(type == 0 ? "Fw Header" : type == 1 ? "Fw Data" : type == 2 ? "Fw Verify" : "OS Reset")")
             return true
         }
-        mAmOtaApi.amOtaPause(peripheral, with: ePauseReq.none)
+        mAmOtaApi.amOtaPause(peripheral, with: ePauseReq.fileReload)
         AmotaEC.upgradeStatus.event?(status.rawValue)
         return false
     }

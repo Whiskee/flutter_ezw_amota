@@ -39,8 +39,9 @@ enum AmotaMC: String {
             break
         case .startOtaUpgrade:
             let jsonData: [String:Any] = arguments as? [String:Any] ?? [:]
+            let uuid = jsonData["uuid"] as? String ?? ""
             let filePath = jsonData["filePath"] as? String ?? ""
-            AmOtaService.shared.startOtaUpgrade(filePath: filePath)
+            AmOtaService.shared.startOtaUpgrade(uuid: uuid, filePath: filePath)
             break
         case .stopOtaUpgrade:
             AmOtaService.shared.stopOtaUpgrade()

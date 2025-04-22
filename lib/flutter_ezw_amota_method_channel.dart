@@ -35,8 +35,11 @@ class MethodChannelFlutterEzwAmota extends FlutterEzwAmotaPlatform {
 
   /// 开始OTA升级
   @override
-  Future<void> startOtaUpgrade(String filePath) async => await methodChannel
-      .invokeMethod('startOtaUpgrade', {"filePath": filePath});
+  Future<void> startOtaUpgrade(String filePath, {String? uuid}) async =>
+      await methodChannel.invokeMethod('startOtaUpgrade', {
+        "filePath": filePath,
+        "uuid": uuid,
+      });
 
   /// 开始OTA升级
   @override
