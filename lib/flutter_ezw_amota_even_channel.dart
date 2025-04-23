@@ -12,6 +12,8 @@ enum FlutterEzwAmotaEc {
   //  - MAX -> 7，分块数超过最大限制
   //  - FILE_OPEN_ERROR -> 8，固件打开失败
   //  - CMD_SEND_ERROR -> 9，发送指令失败，仅Android适用
+  //  - UPGRADING -> 10，正在升级
+  //  - UPGRADE_STOP -> 11，升级停止
   upgradeStatus, 
   //  升级进度
   upgradeProgress, 

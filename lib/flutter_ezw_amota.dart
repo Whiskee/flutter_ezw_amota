@@ -17,12 +17,12 @@ class FlutterEzwAmota {
 
   /// 升级状态
   Stream<int> upgradeStatus = FlutterEzwAmotaEc.upgradeStatus.ec.map(
-    (data) => int.tryParse(data) ?? 0,
+    (data) => data as int? ?? 0,
   );
 
   /// 升级进度
   Stream<int> upgradeProgress = FlutterEzwAmotaEc.upgradeProgress.ec.map(
-    (data) => int.tryParse(data) ?? 0,
+    (data) => data as int? ?? 0,
   );
 
   /// 仅支持Android， OTA 升级指令处理

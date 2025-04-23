@@ -93,13 +93,10 @@ public class AmOtaService: NSObject {
         guard loadOtaFile(filePath: filePath) else {
             return
         }
-        //  给连接设备注册状态代理
         self.peripheral = peripheral
         self.peripheral?.delegate = self
-        //  启用OTA升级接口：执行服务查询
-        mAmOtaApi.amOtaEnable(peripheral, withServiceUUID: UUID_AMOTA_SERVICE)
-        AmotaEC.upgradeStatus.event?(eAmotaStatus.upgrading)
-        log.info("AmOtaService - Stop OTA: Success")
+        centralManager?.connect(self.peripheral!)
+        log.info("AmOtaService - Start OTA: \(uuid) start connecting")
     }
     
     /**
@@ -121,12 +118,10 @@ public class AmOtaService: NSObject {
             log.warning("AmOtaService - Stop OTA: Is already stop")
             return
         }
-        fileBytes = nil
-        fileSize = 0
-        isOtaUpgrading = false
+        resetUpgradeProperties()
         mAmOtaApi.amOtaPause(peripheral, with: ePauseReq.fileReload)
         AmotaEC.upgradeStatus.event?(eAmotaStatus.upgradeStop)
-        log.info("AmOtaService - Stop OTA: finish")
+        log.info("AmOtaService - Stop OTA")
     }
     
     /**
@@ -142,7 +137,6 @@ public class AmOtaService: NSObject {
         stopOtaUpgrade()
         isInitialized = false
         centralManager = nil
-        peripheral = nil
         //  移除Amota升级监听
         mAmOtaApi.amotaApiUpdateAppDataDelegate = nil
         //  移除所有监听
@@ -223,14 +217,38 @@ extension AmOtaService {
         }
         log.info("AmOtaService - Start OTA: Config is enable, start ota upgrade after 3s")
     }
-
+    
+    /**
+     * 重置升级属性
+     * 步骤:
+     * 1. 清除文件字节指针
+     * 2. 重置文件大小
+     * 3. 清除设备引用
+     * 4. 重置升级状态
+     */
+    private func resetUpgradeProperties() {
+        fileBytes = nil
+        fileSize = 0
+        peripheral = nil
+        isOtaUpgrading = false
+    }
+    
 }
 
 /// MARK - CBPeripheralDelegate
 extension AmOtaService: CBCentralManagerDelegate {
+    
     public func centralManagerDidUpdateState(_ central: CBCentralManager) {
         log.info("AmOtaService - Init OTA: \(central.state.rawValue) ")
     }
+    
+    public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        //  启用OTA升级接口：执行服务查询
+        mAmOtaApi.amOtaEnable(peripheral, withServiceUUID: UUID_AMOTA_SERVICE)
+        AmotaEC.upgradeStatus.event?(eAmotaStatus.upgrading)
+        log.info("AmOtaService - Start OTA: \(peripheral.identifier.uuidString) had connected, start ota upgrade")
+    }
+    
 }
 
 /// MARK - CBPeripheralDelegate
@@ -330,7 +348,7 @@ extension AmOtaService: AmotaApiUpdateAppDataDelegate {
      */
     public func didAmOtaFwDataRsp(_ pkgSentStatus: eAmotaStatus, withDataLengthSent length: UInt32) {
         guard !sendOtaUpgradeStatus(status: pkgSentStatus, type: 1) else {
-            AmotaEC.upgradeProgress.event?(Double(length / fileSize))
+            AmotaEC.upgradeProgress.event?(Int(length / fileSize))
             return
         }
         log.error("AmOtaService - Upgrading: Fw data rsp error = Length = \(length), status = \(pkgSentStatus.rawValue)")
@@ -365,7 +383,12 @@ extension AmOtaService: AmotaApiUpdateAppDataDelegate {
         guard status != eAmotaStatus.success else {
             //  校验指令发送成功后，表示升级完成
             if type == 2 {
-                AmotaEC.upgradeStatus.event?(eAmotaStatus.success.rawValue)
+                DispatchQueue.main.asyncAfter(deadline:.now() + 1.5) { [weak self] in
+                    //    重置升级属性
+                    self?.resetUpgradeProperties()
+                    //  发送完成
+                    AmotaEC.upgradeStatus.event?(eAmotaStatus.success.rawValue)
+                }
             }
             log.info("AmOtaService - Upgrading: Success, type = \(type == 0 ? "Fw Header" : type == 1 ? "Fw Data" : type == 2 ? "Fw Verify" : "OS Reset")")
             return true
