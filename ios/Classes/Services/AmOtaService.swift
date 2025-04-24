@@ -84,6 +84,7 @@ public class AmOtaService: NSObject {
             log.warning("AmOtaService - Start OTA: Is upgrading")
             return
         }
+        resetUpgradeProperties()
         guard let peripheral = centralManager?.retrieveConnectedPeripherals(withServices: [CBUUID(string: UUID_AMOTA_SERVICE)]).first(where: { peripheral in
             peripheral.identifier.uuidString == uuid
         }) else {
@@ -348,13 +349,14 @@ extension AmOtaService: AmotaApiUpdateAppDataDelegate {
      */
     public func didAmOtaFwDataRsp(_ pkgSentStatus: eAmotaStatus, withDataLengthSent length: UInt32) {
         guard !sendOtaUpgradeStatus(status: pkgSentStatus, type: 1) else {
-            AmotaEC.upgradeProgress.event?(Int(length / fileSize))
+            AmotaEC.upgradeProgress.event?(100 * Int(length / fileSize))
+            log.error("AmOtaService::Upgrading - Fw data rsp: Length = \(length), size = \(self.fileSize)")
             return
         }
         log.error("AmOtaService - Upgrading: Fw data rsp error = Length = \(length), status = \(pkgSentStatus.rawValue)")
     }
     
-     /**
+    /**
      * 用户命令响应处理
      * 步骤:
      * 1. 发送升级状态
@@ -365,7 +367,7 @@ extension AmOtaService: AmotaApiUpdateAppDataDelegate {
         guard !sendOtaUpgradeStatus(status: status, type: type) else {
             return
         }
-        log.error("AmOtaService - Upgrading: User cmd rsp error = Cmd = \(curCmd.rawValue), status = \(status.rawValue)")
+        log.error("AmOtaService - Upgrading: User cmd rsp error, cmd = \(curCmd.rawValue), status = \(status.rawValue)")
     }
 
     /**

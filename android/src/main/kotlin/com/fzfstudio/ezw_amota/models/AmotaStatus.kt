@@ -28,10 +28,13 @@ enum class AmotaStatus(status: Int) {
     //  升级中
     UPGRADING(10),
     //  升级停止
-    UPGRADE_STOP(11);
+    UPGRADE_STOP(11),
+    //  初始化失败
+    OTA_NOT_INITIALIZED(12);
 
     val code: Int
         get() = when(this) {
+            UPGRADE_SUCCESS -> 0
             CRC_ERROR -> 1
             INVALID_HEADER_INFO -> 2
             INVALID_PACKAGE_LENGTH -> 3
@@ -43,6 +46,6 @@ enum class AmotaStatus(status: Int) {
             CMD_SEND_ERROR -> 9
             UPGRADING -> 10
             UPGRADE_STOP -> 11
-            UPGRADE_SUCCESS -> 12
+            OTA_NOT_INITIALIZED -> 12
         }
 }
