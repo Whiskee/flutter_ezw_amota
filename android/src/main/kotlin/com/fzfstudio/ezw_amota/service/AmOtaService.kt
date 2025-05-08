@@ -138,12 +138,14 @@ class AmOtaService {
         val responseData = formatHex2String(response)
         if (cmd == AmotaCmd.AMOTA_CMD_UNKNOWN) {
             Log.e(TAG, "OTA response: Cmd = $cmd, got unknown response = $responseData")
+            amOtaStop()
             return
         }
         // TODO: handle CRC error and some more here
         if ((response[3].toInt() and 0xff) != 0) {
             Log.e(TAG, "OTA response: Cmd = $cmd, error occurred, response = $responseData")
             AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.CRC_ERROR.code)
+            amOtaStop()
             return
         }
         when (cmd) {
@@ -151,19 +153,19 @@ class AmOtaService {
                 fileOffset =
                     ((response[4].toInt() and 0xFF) + ((response[5].toInt() and 0xFF) shl 8) +
                             ((response[6].toInt() and 0xFF) shl 16) + ((response[7].toInt() and 0xFF) shl 24))
-                Log.i(TAG, "OTA response:  Cmd = $cmd, get AMOTA_CMD_FW_HEADER response, mFileOffset = $fileOffset")
+                Log.i(TAG, "OTA response:  Cmd = $cmd, mFileOffset = $fileOffset")
                 cmdResponseArrived()
             }
             AmotaCmd.AMOTA_CMD_FW_DATA -> {
-                Log.i(TAG, "OTA response: Cmd = $cmd, get AMOTA_CMD_FW_DATA response")
+                Log.i(TAG, "OTA response: Cmd = $cmd response")
                 cmdResponseArrived()
             }
             AmotaCmd.AMOTA_CMD_FW_VERIFY -> {
-                Log.i(TAG, "OTA response: Cmd = $cmd, get AMOTA_CMD_FW_VERIFY response")
+                Log.i(TAG, "OTA response: Cmd = $cmd response")
                 cmdResponseArrived()
             }
             AmotaCmd.AMOTA_CMD_FW_RESET -> {
-                Log.i(TAG, "OTA response: Cmd = $cmd, get AMOTA_CMD_FW_RESET response")
+                Log.i(TAG, "OTA response: Cmd = $cmd response")
                 cmdResponseArrived()
             }
             else -> Log.i(TAG, "OTA response: Cmd = $cmd, get response from unknown command")
@@ -350,8 +352,6 @@ class AmOtaService {
                 Log.e(TAG, "Send Packet: Failed, error = ${e.message}")
             }
             idx += frameLen
-            //  延迟50毫秒，等待gatt回复
-            delay(15)
         }
         return true
     }
@@ -370,17 +370,17 @@ class AmOtaService {
      */
     @OptIn(DelicateCoroutinesApi::class)
     @Throws(InterruptedException::class)
-    private fun sendOneFrame(data: ByteArray?, isNeedResponse: Boolean = false): Boolean {
+    private suspend fun sendOneFrame(data: ByteArray?, isNeedResponse: Boolean = false): Boolean {
         if (!isOtaUpgrading) {
             Log.e(TAG, "Send Cmd: OTA stopped due to application control")
             return false
         }
         //  发送指令
         mainEventSend(AmotaEvent.OTA_CMD_HANDLE, data)
-        //  等待回复
         return if (isNeedResponse) {
-            waitCmdResponse()
+            waitCmdResponse(3000)
         } else {
+            delay(30)
             true
         }
     }
@@ -414,7 +414,8 @@ class AmOtaService {
         val fwDataSize = fileSize
         var ret = -1
         var offset = fileOffset
-        Log.i(TAG, "OTA upgrading - Send fw Data: File size = $fileSize")
+        var packCount = fileSize / AMOTA_FW_PACKET_SIZE
+        Log.i(TAG, "OTA upgrading - Send fw Data: file size = $fileSize，pack count = $packCount")
         while (offset < fwDataSize) {
             try {
                 ret = sentFwDataPacket()
@@ -430,7 +431,12 @@ class AmOtaService {
                 return false
             }
             offset += ret
+            //  每8k等待眼镜BUFF处理完
+            if (offset % 8192 == 0) {
+                delay(500)
+            }
             mainEventSend(AmotaEvent.UPGRADE_PROGRESS, (offset * 100) / fwDataSize)
+            Log.i(TAG, "OTA upgrading - Send fw Data: Total pack count = ${packCount}, had send pack count = ${offset / AMOTA_FW_PACKET_SIZE}")
         }
         Log.i(TAG, "OTA upgrading - Send Fw data: Send firmware data complete")
         return true
@@ -458,7 +464,7 @@ class AmOtaService {
         if (ret < AMOTA_FW_PACKET_SIZE) {
             len = ret
         }
-        Log.i(TAG, "OTA upgrading - Sent data packet: Send fw data len = $len")
+        Log.i(TAG, "OTA upgrading - Sent data packet: fw data len = $len")
         return if (sendOtaCmd(AmotaCmd.AMOTA_CMD_FW_DATA, fwData, len)) {
             ret
         } else {
@@ -499,7 +505,6 @@ class AmOtaService {
         return stringBuilder.toString()
     }
 
-
     /**
      * 等待命令响应
      * @param timeoutMs 最大等待时间（单位：毫秒，默认3000ms）
@@ -513,7 +518,7 @@ class AmOtaService {
     private fun waitCmdResponse(timeoutMs: Long = 3000): Boolean = try {
         cmdResponseSemaphore!!.tryAcquire(timeoutMs, TimeUnit.MILLISECONDS)
     } catch (e: InterruptedException) {
-        Log.e(TAG, "Send Cmd: Wait response error = ${e.message}")
+        Log.e(TAG, "Send Cmd: Wait Cmd response error = ${e.message}")
         false
     }
 

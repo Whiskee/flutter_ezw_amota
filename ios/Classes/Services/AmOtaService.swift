@@ -21,7 +21,7 @@ public class AmOtaService: NSObject {
     //  =========== Private Constants
     private let log: Logger = Logger()
     //  设置默认缓冲区域
-    private let defaultBrick: UInt16 = 128
+    private let defaultBrick: UInt16 = 1024
     
     //  =========== Private Variables
     //  是否已经初始化了
@@ -76,19 +76,19 @@ public class AmOtaService: NSObject {
      */
     func startOtaUpgrade(uuid: String, filePath: String) {
         guard isInitialized else {
-            log.error("AmOtaService - Start OTA: You must initOta first")
+            log.error("AmOtaService::Start OTA: You must initOta first")
             AmotaEC.upgradeStatus.event?(eAmotaStatus.otaNotInitialized)
             return
         }
         guard !isOtaUpgrading else {
-            log.warning("AmOtaService - Start OTA: Is upgrading")
+            log.warning("AmOtaService::Start OTA: Is upgrading")
             return
         }
         resetUpgradeProperties()
         guard let peripheral = centralManager?.retrieveConnectedPeripherals(withServices: [CBUUID(string: UUID_AMOTA_SERVICE)]).first(where: { peripheral in
             peripheral.identifier.uuidString == uuid
         }) else {
-            log.error("AmOtaService - Start OTA: You must provide peripheral")
+            log.error("AmOtaService::Start OTA: You must provide peripheral")
             return
         }
         guard loadOtaFile(filePath: filePath) else {
@@ -97,7 +97,7 @@ public class AmOtaService: NSObject {
         self.peripheral = peripheral
         self.peripheral?.delegate = self
         centralManager?.connect(self.peripheral!)
-        log.info("AmOtaService - Start OTA: \(uuid) start connecting")
+        log.info("AmOtaService::Start OTA: \(uuid) start connecting")
     }
     
     /**
@@ -111,18 +111,18 @@ public class AmOtaService: NSObject {
      */
     func stopOtaUpgrade() {
         guard isInitialized else {
-            log.warning("AmOtaService - Stop OTA: You must initOta first")
+            log.warning("AmOtaService::Stop OTA: You must initOta first")
             AmotaEC.upgradeStatus.event?(eAmotaStatus.otaNotInitialized)
             return
         }
         guard isOtaUpgrading else {
-            log.warning("AmOtaService - Stop OTA: Is already stop")
+            log.warning("AmOtaService::Stop OTA: Is already stop")
             return
         }
         resetUpgradeProperties()
         mAmOtaApi.amOtaPause(peripheral, with: ePauseReq.fileReload)
         AmotaEC.upgradeStatus.event?(eAmotaStatus.upgradeStop)
-        log.info("AmOtaService - Stop OTA")
+        log.info("AmOtaService::Stop OTA")
     }
     
     /**
@@ -142,7 +142,7 @@ public class AmOtaService: NSObject {
         mAmOtaApi.amotaApiUpdateAppDataDelegate = nil
         //  移除所有监听
         NotificationCenter.default.removeObserver(self)
-        log.info("AmOtaService - Already release")
+        log.info("AmOtaService::Already release")
     }
    
 }
@@ -165,24 +165,24 @@ extension AmOtaService {
             let isReachable = try fileUrl.checkResourceIsReachable()
             if !isReachable {
                 AmotaEC.upgradeStatus.event?(eAmotaStatus.fileReadError)
-                log.error("AmOtaService - Start OTA: File not reachable: \(filePath)")
+                log.error("AmOtaService::Start OTA: File not reachable: \(filePath)")
                 return false
             }
         } catch {
             AmotaEC.upgradeStatus.event?(eAmotaStatus.fileReadError)
-            log.error("AmOtaService - Start OTA: File check failed: \(error.localizedDescription), path = \(filePath)")
+            log.error("AmOtaService::Start OTA: File check failed: \(error.localizedDescription), path = \(filePath)")
             return false
         }
         guard let fileData = NSData(contentsOfFile: filePath) else {
             AmotaEC.upgradeStatus.event?(eAmotaStatus.fileReadError)
-            log.error("AmOtaService - Start OTA: File data is null, path = \(filePath)")
+            log.error("AmOtaService::Start OTA: File data is null, path = \(filePath)")
             return false
         }
         fileBytes = fileData.bytes.assumingMemoryBound(to: UInt8.self)
         fileSize = UInt32(fileData.length)
         let isFileEnable = fileBytes != nil && fileSize > 0
         AmotaEC.upgradeStatus.event?(eAmotaStatus.fileReadError)
-        log.info("AmOtaService - Start OTA: File path = \(filePath), size = \(self.fileSize), is enable = \(isFileEnable)")
+        log.info("AmOtaService::Start OTA: File path = \(filePath), size = \(self.fileSize), is enable = \(isFileEnable)")
         return isFileEnable
     }
     
@@ -202,7 +202,7 @@ extension AmOtaService {
         let otaEnableStatus = dictStatus[keyAmotaEnableConfirm]
         guard let status = otaEnableStatus as? NSNumber, status == 1 else {
             AmotaEC.upgradeStatus.event?(eAmotaStatus.unknownError.rawValue)
-            log.error("AmOtaService - Start OTA: Config failed!!!")
+            log.error("AmOtaService::Start OTA: Config failed!!!")
             return
         }
         //  设置状态为升级状态
@@ -214,9 +214,9 @@ extension AmOtaService {
             }
             self.mAmOtaApi.amOtaSetupBrickSize(self.defaultBrick * 4)
             self.mAmOtaApi.amOtaStart(self.peripheral, withDataByte: self.fileBytes, withLength: self.fileSize)
-            self.log.info("AmOtaService - Start OTA: Ota is upgrading")
+            self.log.info("AmOtaService::Start OTA: Ota is upgrading")
         }
-        log.info("AmOtaService - Start OTA: Config is enable, start ota upgrade after 3s")
+        log.info("AmOtaService::Start OTA: Config is enable, start ota upgrade after 3s")
     }
     
     /**
@@ -240,14 +240,14 @@ extension AmOtaService {
 extension AmOtaService: CBCentralManagerDelegate {
     
     public func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        log.info("AmOtaService - Init OTA: \(central.state.rawValue) ")
+        log.info("AmOtaService::Init OTA: \(central.state.rawValue) ")
     }
     
     public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         //  启用OTA升级接口：执行服务查询
         mAmOtaApi.amOtaEnable(peripheral, withServiceUUID: UUID_AMOTA_SERVICE)
         AmotaEC.upgradeStatus.event?(eAmotaStatus.upgrading)
-        log.info("AmOtaService - Start OTA: \(peripheral.identifier.uuidString) had connected, start ota upgrade")
+        log.info("AmOtaService::Start OTA: \(peripheral.identifier.uuidString) had connected, start ota upgrade")
     }
     
 }
@@ -260,7 +260,7 @@ extension AmOtaService: CBPeripheralDelegate {
         peripheral.services?.forEach { service in
             peripheral.discoverCharacteristics(nil, for: service)
         }
-        log.info("AmOtaService - Start OTA: \(peripheral.services == nil ? "Not find service" : "Finding service") ")
+        log.info("AmOtaService::Start OTA: \(peripheral.services == nil ? "Not find service" : "Finding service") ")
     }
 
     // 蓝牙特征发现回调
@@ -268,7 +268,7 @@ extension AmOtaService: CBPeripheralDelegate {
         //  遍历所有特征并发现其描述符
         service.characteristics?.forEach { chars in
             peripheral.discoverDescriptors(for: chars)
-            log.info("AmOtaService - Start OTA: Characteristic uuid = \(chars.uuid.uuidString), properties = \(chars.properties.rawValue)")
+            log.info("AmOtaService::Start OTA: Chars uuid = \(chars.uuid.uuidString), properties = \(chars.properties.rawValue)")
         }
         //  Amota: 接收服务
         let dictSvcInfo: [String: Any?] = [
@@ -287,7 +287,7 @@ extension AmOtaService: CBPeripheralDelegate {
     public func peripheral(_ peripheral: CBPeripheral, didDiscoverDescriptorsFor characteristic: CBCharacteristic, error: (any Error)?) {
         characteristic.descriptors?.forEach { descriptor in
             peripheral.readValue(for: descriptor)
-            log.info("AmOtaService - Start OTA: Descriptor value = \(String(describing: descriptor.value ?? "")), uuid = \(descriptor.uuid.uuidString)")
+            log.info("AmOtaService::Start OTA: Descriptor value = \(String(describing: descriptor.value ?? "")), uuid = \(descriptor.uuid.uuidString)")
         }
     }
     
@@ -307,7 +307,7 @@ extension AmOtaService: CBPeripheralDelegate {
                 userInfo: nil
             )
         }
-        log.info("AmOtaService - Start OTA: Characteristic uuid = \(characteristic.uuid.uuidString)), error = \(error?.localizedDescription ?? "null")")
+        log.info("AmOtaService::Start OTA: Chars uuid = \(characteristic.uuid.uuidString)), error = \(error?.localizedDescription ?? "null")")
     }
     
     // 通知状态更新回调
@@ -315,12 +315,12 @@ extension AmOtaService: CBPeripheralDelegate {
         if error == nil {
             peripheral.readValue(for: characteristic)
         }
-        log.info("AmOtaService - Start OTA: Update notification state, error = \(error?.localizedDescription ?? "null")")
+        log.info("AmOtaService::Start OTA: Update notification state, error = \(error?.localizedDescription ?? "null")")
     }
     
     // 描述符值更新回调
     public func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor descriptor: CBDescriptor, error: (any Error)?) {
-        log.info("AmOtaService - Start OTA: Descriptor uuid = \(descriptor.uuid.uuidString), update value = \(String(describing: descriptor.value ?? ""))")
+        log.info("AmOtaService::Start OTA: Descriptor uuid = \(descriptor.uuid.uuidString), update value = \(String(describing: descriptor.value ?? ""))")
     }
 }
 
@@ -337,7 +337,7 @@ extension AmOtaService: AmotaApiUpdateAppDataDelegate {
         guard !sendOtaUpgradeStatus(status: svrStatus) else {
             return
         }
-        log.error("AmOtaService - Upgrading: Fw Header rsp error = \(svrStatus.rawValue)")
+        log.error("AmOtaService::Upgrading: Fw Header rsp error = \(svrStatus.rawValue)")
     }
     
     /**
@@ -348,12 +348,12 @@ extension AmOtaService: AmotaApiUpdateAppDataDelegate {
      * 3. 检查响应状态
      */
     public func didAmOtaFwDataRsp(_ pkgSentStatus: eAmotaStatus, withDataLengthSent length: UInt32) {
-        guard !sendOtaUpgradeStatus(status: pkgSentStatus, type: 1) else {
-            AmotaEC.upgradeProgress.event?(100 * Int(length / fileSize))
-            log.error("AmOtaService::Upgrading - Fw data rsp: Length = \(length), size = \(self.fileSize)")
+        guard sendOtaUpgradeStatus(status: pkgSentStatus, type: 1) else {
+            log.error("AmOtaService::Upgrading: Fw data rsp error, Length = \(length), status = \(pkgSentStatus.rawValue)")
             return
         }
-        log.error("AmOtaService - Upgrading: Fw data rsp error = Length = \(length), status = \(pkgSentStatus.rawValue)")
+        AmotaEC.upgradeProgress.event?(Int(100 * Float(length / fileSize)))
+        log.error("AmOtaService::Upgrading - Fw data rsp: Length = \(length), size = \(self.fileSize)")
     }
     
     /**
@@ -367,7 +367,7 @@ extension AmOtaService: AmotaApiUpdateAppDataDelegate {
         guard !sendOtaUpgradeStatus(status: status, type: type) else {
             return
         }
-        log.error("AmOtaService - Upgrading: User cmd rsp error, cmd = \(curCmd.rawValue), status = \(status.rawValue)")
+        log.error("AmOtaService::Upgrading: User cmd rsp error, cmd = \(curCmd.rawValue), status = \(status.rawValue)")
     }
 
     /**
@@ -382,21 +382,21 @@ extension AmOtaService: AmotaApiUpdateAppDataDelegate {
      * 3. 触发状态事件
      */
     private func sendOtaUpgradeStatus(status: eAmotaStatus, type: Int = 0) -> Bool {
-        guard status != eAmotaStatus.success else {
-            //  校验指令发送成功后，表示升级完成
-            if type == 2 {
-                DispatchQueue.main.asyncAfter(deadline:.now() + 1.5) { [weak self] in
-                    //    重置升级属性
-                    self?.resetUpgradeProperties()
-                    //  发送完成
-                    AmotaEC.upgradeStatus.event?(eAmotaStatus.success.rawValue)
-                }
-            }
-            log.info("AmOtaService - Upgrading: Success, type = \(type == 0 ? "Fw Header" : type == 1 ? "Fw Data" : type == 2 ? "Fw Verify" : "OS Reset")")
-            return true
+        guard status == eAmotaStatus.success else {
+            mAmOtaApi.amOtaPause(peripheral, with: ePauseReq.fileReload)
+            AmotaEC.upgradeStatus.event?(status.rawValue)
+            return false
         }
-        mAmOtaApi.amOtaPause(peripheral, with: ePauseReq.fileReload)
-        AmotaEC.upgradeStatus.event?(status.rawValue)
-        return false
+        //  校验指令发送成功后，表示升级完成
+        if type == 2 {
+            DispatchQueue.main.asyncAfter(deadline:.now() + 1.5) { [weak self] in
+                //    重置升级属性
+                self?.resetUpgradeProperties()
+                //  发送完成
+                AmotaEC.upgradeStatus.event?(eAmotaStatus.success.rawValue)
+            }
+        }
+        log.info("AmOtaService::Upgrading: Success, type = \(type == 0 ? "Fw Header" : type == 1 ? "Fw Data" : type == 2 ? "Fw Verify" : "OS Reset")")
+        return true
     }
 }

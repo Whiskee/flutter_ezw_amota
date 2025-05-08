@@ -10,7 +10,7 @@ object AmotaConstants {
     //  - 固件数据段大小（字节）
     const val AMOTA_FW_PACKET_SIZE = 512
     //  - BLE单次传输最大载荷（字节）
-    const val MAXIMUM_APP_PAYLOAD = 20
+    const val MAXIMUM_APP_PAYLOAD = 240
 
     /// 协议字段长度定义
     //  - 长度字段占字节数
