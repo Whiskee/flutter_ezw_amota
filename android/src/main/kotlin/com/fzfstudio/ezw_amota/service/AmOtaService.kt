@@ -93,7 +93,7 @@ class AmOtaService {
             startOtaUpdate()
         }
         isOtaUpgrading = true
-        AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.UPGRADING.code)
+        mainEventSend(AmotaEvent.UPGRADE_STATUS, AmotaStatus.UPGRADING.code)
     }
 
     /**
@@ -115,7 +115,7 @@ class AmOtaService {
         //  停止OTA升级任务
         otaJob?.cancel()
         otaJob = null
-        AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.UPGRADE_STOP.code)
+        mainEventSend(AmotaEvent.UPGRADE_STATUS, AmotaStatus.UPGRADE_STOP.code)
     }
 
     /**
@@ -144,7 +144,7 @@ class AmOtaService {
         // TODO: handle CRC error and some more here
         if ((response[3].toInt() and 0xff) != 0) {
             Log.e(TAG, "OTA response: Cmd = $cmd, error occurred, response = $responseData")
-            AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.CRC_ERROR.code)
+            mainEventSend(AmotaEvent.UPGRADE_STATUS, AmotaStatus.CRC_ERROR.code)
             amOtaStop()
             return
         }
@@ -191,7 +191,7 @@ class AmOtaService {
                 fileSize = inputStream.available()
                 if (fileSize == 0) {
                     Log.w(TAG, "OTA upgrading: Open file error, path: $filePath")
-                    AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.FILE_READ_ERROR.code)
+                    mainEventSend(AmotaEvent.UPGRADE_STATUS, AmotaStatus.FILE_READ_ERROR.code)
                     return
                 }
                 if (!sendFwHeader()) {
@@ -223,11 +223,11 @@ class AmOtaService {
             }
         } catch (e: IOException) {
             isOtaUpgrading = false
-            AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.FILE_READ_ERROR.code)
+            mainEventSend(AmotaEvent.UPGRADE_STATUS, AmotaStatus.FILE_READ_ERROR.code)
             Log.e(TAG, "OTA upgrading: File operation error: ${e.message}")
         } catch (e: Exception) {
             isOtaUpgrading = false
-            AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.UNKNOWN_ERROR.code)
+            mainEventSend(AmotaEvent.UPGRADE_STATUS, AmotaStatus.UNKNOWN_ERROR.code)
             Log.e(TAG, "OTA upgrading: Failed: ${e.message}")
         } finally {
             fileInputStream = null
@@ -317,10 +317,10 @@ class AmOtaService {
             Log.e(TAG, "Send Cmd: Failed, Cmd = ${cmd.name}")
             when (cmd) {
                 // 根据命令类型发送对应的错误状态
-                AmotaCmd.AMOTA_CMD_FW_HEADER -> AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.INVALID_HEADER_INFO.code)
-                AmotaCmd.AMOTA_CMD_FW_DATA -> AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.INVALID_PACKAGE_LENGTH.code)
-                AmotaCmd.AMOTA_CMD_FW_VERIFY -> AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.CMD_SEND_ERROR.code)
-                else -> AmotaEvent.UPGRADE_STATUS.sink?.success(AmotaStatus.UNKNOWN_ERROR.code)
+                AmotaCmd.AMOTA_CMD_FW_HEADER -> mainEventSend(AmotaEvent.UPGRADE_STATUS,AmotaStatus.INVALID_HEADER_INFO.code)
+                AmotaCmd.AMOTA_CMD_FW_DATA -> mainEventSend( AmotaEvent.UPGRADE_STATUS, AmotaStatus.INVALID_PACKAGE_LENGTH.code)
+                AmotaCmd.AMOTA_CMD_FW_VERIFY -> mainEventSend(AmotaEvent.UPGRADE_STATUS, AmotaStatus.CMD_SEND_ERROR.code)
+                else -> mainEventSend(AmotaEvent.UPGRADE_STATUS, AmotaStatus.UNKNOWN_ERROR.code)
             }
             false
         }
