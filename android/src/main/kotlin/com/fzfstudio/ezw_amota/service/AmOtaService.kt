@@ -434,7 +434,7 @@ class AmOtaService {
             offset += ret
             //  每1k等待眼镜BUFF处理完
             if (offset % 1024 == 0) {
-                delay(200)
+                delay(50)
             }
             mainEventSend(AmotaEvent.UPGRADE_PROGRESS, (offset * 100) / fwDataSize)
             Log.i(TAG, "OTA upgrading - Send fw Data: Total pack count = ${packCount}, had send pack count = ${offset / AMOTA_FW_PACKET_SIZE}")
