@@ -40,11 +40,11 @@ abstract class FlutterEzwAmotaPlatform extends PlatformInterface {
   }
 
   /// 开始升级
-  /// 
+  ///
   /// - filePath: 升级文件路径
   /// - uuid: 设备uuid，仅iOS有效
-  /// 
-  Future<void> startOtaUpgrade(String filePath,{String? uuid}) {
+  ///
+  Future<void> startOtaUpgrade(String filePath, {String? uuid}) {
     throw UnimplementedError('startOtaUpgrade() has not been implemented.');
   }
 

@@ -345,7 +345,8 @@ class AmOtaService {
             val frame = ByteArray(frameLen)
             System.arraycopy(data, idx, frame, 0, frameLen)
             try {
-                if (!sendOneFrame(frame, idx == len - 1)) {
+                Log.e(TAG, "Send Packet: mini packet index = $idx")
+                if (!sendOneFrame(frame, idx == AMOTA_FW_PACKET_SIZE)) {
                     return false
                 }
             } catch (e: InterruptedException) {
@@ -378,9 +379,9 @@ class AmOtaService {
         //  发送指令
         mainEventSend(AmotaEvent.OTA_CMD_HANDLE, data)
         return if (isNeedResponse) {
-            waitCmdResponse(3000)
+            waitCmdResponse()
         } else {
-            delay(30)
+            delay(35)
             true
         }
     }
@@ -414,7 +415,7 @@ class AmOtaService {
         val fwDataSize = fileSize
         var ret = -1
         var offset = fileOffset
-        var packCount = fileSize / AMOTA_FW_PACKET_SIZE
+        val packCount = fileSize / AMOTA_FW_PACKET_SIZE
         Log.i(TAG, "OTA upgrading - Send fw Data: file size = $fileSize，pack count = $packCount")
         while (offset < fwDataSize) {
             try {
@@ -431,9 +432,9 @@ class AmOtaService {
                 return false
             }
             offset += ret
-            //  每8k等待眼镜BUFF处理完
-            if (offset % 8192 == 0) {
-                delay(500)
+            //  每1k等待眼镜BUFF处理完
+            if (offset % 1024 == 0) {
+                delay(200)
             }
             mainEventSend(AmotaEvent.UPGRADE_PROGRESS, (offset * 100) / fwDataSize)
             Log.i(TAG, "OTA upgrading - Send fw Data: Total pack count = ${packCount}, had send pack count = ${offset / AMOTA_FW_PACKET_SIZE}")
