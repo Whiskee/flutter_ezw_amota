@@ -358,6 +358,10 @@ class AmOtaService {
                 Log.e(TAG, "Send Packet: Failed, error = ${e.message}")
             }
             idx += frameLen
+            if (idx % (6 * MAXIMUM_APP_PAYLOAD) == 0) {
+                Log.e(TAG, "Send Packet: ${idx / (4 * MAXIMUM_APP_PAYLOAD)} Delay 20ms")
+                delay(50)
+            }
         }
         return true
     }
@@ -387,7 +391,7 @@ class AmOtaService {
         return if (isNeedResponse) {
             waitCmdResponse()
         } else {
-            delay(15)
+            delay(5)
             true
         }
     }
@@ -527,7 +531,10 @@ class AmOtaService {
      * 执行流程：
      * 释放响应信号量（许可数+1）
      */
-    fun cmdGattReplayArrived() = cmdGattReplySemaphore?.release()
+    fun cmdGattReplayArrived() {
+        Log.e(TAG, "Send Cmd: Gatt reply arrived")
+        cmdGattReplySemaphore?.release()
+    }
 
     /**
      * 等待命令响应
