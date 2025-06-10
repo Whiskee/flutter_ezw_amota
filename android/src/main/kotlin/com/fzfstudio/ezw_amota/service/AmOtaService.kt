@@ -360,7 +360,7 @@ class AmOtaService {
             idx += frameLen
             if (idx % (6 * MAXIMUM_APP_PAYLOAD) == 0) {
                 Log.e(TAG, "Send Packet: ${idx / (4 * MAXIMUM_APP_PAYLOAD)} Delay 20ms")
-                delay(50)
+                delay(100)
             }
         }
         return true
