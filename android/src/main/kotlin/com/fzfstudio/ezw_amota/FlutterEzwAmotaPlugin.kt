@@ -34,6 +34,8 @@ class FlutterEzwAmotaPlugin: FlutterPlugin, MethodCallHandler {
       AmOtaService.instance.amOtaStart(filePath)
     } else if (call.method == "stopOtaUpgrade") {
       AmOtaService.instance.amOtaStop()
+    } else if (call.method == "otaCmdGattReply") {
+      AmOtaService.instance.cmdGattReplayArrived()
     } else if (call.method == "otaCmdResponse") {
       val response = call.arguments as ByteArray
       AmOtaService.instance.otaCmdResponse(response)

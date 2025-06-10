@@ -53,7 +53,12 @@ abstract class FlutterEzwAmotaPlatform extends PlatformInterface {
     throw UnimplementedError('stopOtaUpgrade() has not been implemented.');
   }
 
-  /// 仅支持Android，指令回复
+  /// 仅支持Android，指令-Gatt回复
+  Future<void> otaCmdGattReply() {
+    throw UnimplementedError('otaCmdGattReply() has not been implemented.');
+  }
+
+  /// 仅支持Android，指令设备响应
   Future<void> otaCmdResponse(Uint8List data) {
     throw UnimplementedError('otaCmdResponse() has not been implemented.');
   }

@@ -46,6 +46,13 @@ class MethodChannelFlutterEzwAmota extends FlutterEzwAmotaPlatform {
   Future<void> stopOtaUpgrade() async =>
       await methodChannel.invokeMethod('stopOtaUpgrade');
 
+  /// 仅支持Android， OTA指令-Gatt回复处理
+  @override
+  Future<void> otaCmdGattReply() async =>
+      Platform.isIOS
+          ? await Future<void>.value()
+          : await methodChannel.invokeMethod('otaCmdGattReply');
+
   /// 仅支持Android， OTA指令回复处理
   @override
   Future<void> otaCmdResponse(Uint8List data) async =>

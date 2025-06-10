@@ -54,7 +54,9 @@ class AmOtaService {
     private var fileOffset = 0
     //  固件文件总大小（单位：字节，从文件头解析得到）
     private var fileSize = 0
-    //  命令响应同步信号量（用于等待设备响应，初始许可数0）
+    //  蓝牙Gatt回复同步信号量（用于等待蓝牙Gatt响应，初始许可数0）
+    private var cmdGattReplySemaphore: Semaphore? = null
+    //  命令响应同步信号量（用于等待蓝牙设备响应，初始许可数0）
     private var cmdResponseSemaphore: Semaphore? = null
 
     /**
@@ -87,6 +89,7 @@ class AmOtaService {
         }
         this.filePath = filePath
         fileOffset = 0
+        cmdGattReplySemaphore = Semaphore(0)
         cmdResponseSemaphore = Semaphore(0)
         //  执行 OTA 升级任务
         otaJob = coroutineScope.launch {
@@ -108,6 +111,8 @@ class AmOtaService {
     fun amOtaStop() {
         filePath = ""
         fileOffset = 0
+        cmdGattReplySemaphore?.release()
+        cmdGattReplySemaphore = null
         cmdResponseSemaphore?.release()
         cmdResponseSemaphore = null
         isOtaUpgrading = false
@@ -346,7 +351,7 @@ class AmOtaService {
             System.arraycopy(data, idx, frame, 0, frameLen)
             try {
                 Log.e(TAG, "Send Packet: mini packet index = $idx")
-                if (!sendOneFrame(frame, idx == AMOTA_FW_PACKET_SIZE)) {
+                if (!sendOneFrame(frame, frameLen < MAXIMUM_APP_PAYLOAD)) {
                     return false
                 }
             } catch (e: InterruptedException) {
@@ -378,10 +383,11 @@ class AmOtaService {
         }
         //  发送指令
         mainEventSend(AmotaEvent.OTA_CMD_HANDLE, data)
+        waitCmdGattReply()
         return if (isNeedResponse) {
             waitCmdResponse()
         } else {
-            delay(35)
+            delay(15)
             true
         }
     }
@@ -432,10 +438,6 @@ class AmOtaService {
                 return false
             }
             offset += ret
-            //  每1k等待眼镜BUFF处理完
-            if (offset % 1024 == 0) {
-                delay(50)
-            }
             mainEventSend(AmotaEvent.UPGRADE_PROGRESS, (offset * 100) / fwDataSize)
             Log.i(TAG, "OTA upgrading - Send fw Data: Total pack count = ${packCount}, had send pack count = ${offset / AMOTA_FW_PACKET_SIZE}")
         }
@@ -507,6 +509,27 @@ class AmOtaService {
     }
 
     /**
+     * 等待Gatt回复
+     * 1. 尝试获取Gatt回复信号量
+     * 2. 处理线程中断异常
+     * 3. 返回信号量获取结果
+     */
+    private fun waitCmdGattReply(timeoutMs: Long = 3000): Boolean = try {
+        Log.d(TAG, "Send Cmd: Star wait gatt reply")
+        cmdGattReplySemaphore?.tryAcquire(timeoutMs, TimeUnit.MILLISECONDS) ?: false
+    } catch (e: InterruptedException) {
+        Log.e(TAG, "Send Cmd: Wait Gatt reply error = ${e.message}")
+        false
+    }
+
+    /**
+     * Gatt回复响应
+     * 执行流程：
+     * 释放响应信号量（许可数+1）
+     */
+    fun cmdGattReplayArrived() = cmdGattReplySemaphore?.release()
+
+    /**
      * 等待命令响应
      * @param timeoutMs 最大等待时间（单位：毫秒，默认3000ms）
      * @return Boolean 是否在超时前收到响应
@@ -517,11 +540,14 @@ class AmOtaService {
      * 3. 返回信号量获取结果
      */
     private fun waitCmdResponse(timeoutMs: Long = 3000): Boolean = try {
-        cmdResponseSemaphore!!.tryAcquire(timeoutMs, TimeUnit.MILLISECONDS)
+        Log.d(TAG, "Send Cmd: Star wait cmd response")
+        cmdResponseSemaphore?.tryAcquire(timeoutMs, TimeUnit.MILLISECONDS) ?: false
     } catch (e: InterruptedException) {
         Log.e(TAG, "Send Cmd: Wait Cmd response error = ${e.message}")
         false
     }
+
+
 
     /**
      * 通知命令响应到达
