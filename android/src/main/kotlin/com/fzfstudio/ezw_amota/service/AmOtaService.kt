@@ -384,10 +384,10 @@ class AmOtaService {
         waitCmdGattReply()
         return if (isNeedResponse) {
             waitCmdResponse()
-            delay(50)
+            delay(100)
             true
         } else {
-            delay(20)
+            delay(50)
             true
         }
     }
