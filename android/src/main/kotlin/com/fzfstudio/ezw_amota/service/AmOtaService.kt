@@ -350,7 +350,7 @@ class AmOtaService {
             val frame = ByteArray(frameLen)
             System.arraycopy(data, idx, frame, 0, frameLen)
             try {
-                Log.e(TAG, "Send Packet: mini packet index = $idx")
+                Log.i(TAG, "Send Packet: mini packet index = $idx")
                 if (!sendOneFrame(frame, frameLen < MAXIMUM_APP_PAYLOAD)) {
                     return false
                 }
@@ -358,10 +358,6 @@ class AmOtaService {
                 Log.e(TAG, "Send Packet: Failed, error = ${e.message}")
             }
             idx += frameLen
-            if (idx % (6 * MAXIMUM_APP_PAYLOAD) == 0) {
-                Log.e(TAG, "Send Packet: ${idx / (4 * MAXIMUM_APP_PAYLOAD)} Delay 20ms")
-                delay(100)
-            }
         }
         return true
     }
@@ -378,8 +374,6 @@ class AmOtaService {
      * 3. 等待GATT写入完成信号
      * 4. 返回写入结果状态
      */
-    @OptIn(DelicateCoroutinesApi::class)
-    @Throws(InterruptedException::class)
     private suspend fun sendOneFrame(data: ByteArray?, isNeedResponse: Boolean = false): Boolean {
         if (!isOtaUpgrading) {
             Log.e(TAG, "Send Cmd: OTA stopped due to application control")
@@ -390,8 +384,10 @@ class AmOtaService {
         waitCmdGattReply()
         return if (isNeedResponse) {
             waitCmdResponse()
+            delay(50)
+            true
         } else {
-            delay(5)
+            delay(20)
             true
         }
     }
@@ -437,7 +433,7 @@ class AmOtaService {
                 if (!isOtaUpgrading) {
                     return false
                 }
-                Log.e(TAG, "OTA upgrading - Send fw data: Sent packet failed")
+                Log.i(TAG, "OTA upgrading - Send fw data: Sent packet failed")
                 mainEventSend(AmotaEvent.UPGRADE_STATUS, AmotaStatus.INVALID_PACKAGE_LENGTH.code)
                 return false
             }
